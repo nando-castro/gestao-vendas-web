@@ -145,6 +145,7 @@ function App() {
   const [availablePermissions, setAvailablePermissions] = useState<string[]>([]);
   const [authChecked, setAuthChecked] = useState(false);
   const [lastClientPendingCount, setLastClientPendingCount] = useState(0);
+  const [loadedViews, setLoadedViews] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
   const [notification, setNotification] = useState<{ type: "success" | "error"; text: string } | null>(null);
@@ -174,7 +175,6 @@ function App() {
     setCurrentUser(result.user);
     setAvailablePermissions(result.permissions);
     setAuthChecked(true);
-    await load();
   }
 
   function logout() {
@@ -183,16 +183,87 @@ function App() {
     setView("home");
   }
 
-  async function load() {
+  function viewLoaders(targetView: string) {
+    const loaders: Array<Promise<unknown>> = [];
+    const addProducts = () => loaders.push(api.products().then(setProducts));
+    const addCategories = () => loaders.push(api.categories().then(setCategories));
+    const addFinance = () => loaders.push(api.finance().then(setFinance));
+    const addStock = () => loaders.push(api.stockMovements().then(setStockMovements));
+    const addOrders = () => loaders.push(api.orders().then(setOrders));
+    const addCustomers = () => loaders.push(api.customers().then(setCustomers));
+
+    if (targetView === "home") {
+      addProducts();
+      addOrders();
+      addCustomers();
+      return loaders;
+    }
+    if (targetView === "dashboard") {
+      addProducts();
+      addOrders();
+      addFinance();
+      return loaders;
+    }
+    if (targetView === "products") {
+      addProducts();
+      addCategories();
+      addOrders();
+      return loaders;
+    }
+    if (targetView === "categories") {
+      addCategories();
+      addProducts();
+      return loaders;
+    }
+    if (targetView === "stock") {
+      addProducts();
+      addCategories();
+      addStock();
+      return loaders;
+    }
+    if (targetView === "lots") {
+      addProducts();
+      return loaders;
+    }
+    if (targetView === "finance") {
+      addFinance();
+      addProducts();
+      addOrders();
+      return loaders;
+    }
+    if (targetView === "orders") {
+      addProducts();
+      addOrders();
+      addCustomers();
+      return loaders;
+    }
+    if (targetView === "clientPageAdmin") {
+      addProducts();
+      return loaders;
+    }
+    if (targetView === "customerOrders") {
+      addOrders();
+      return loaders;
+    }
+    if (targetView === "customers") {
+      addCustomers();
+      addOrders();
+      return loaders;
+    }
+    return loaders;
+  }
+
+  async function loadView(targetView = view, force = false) {
+    if (!force && loadedViews[targetView]) return;
+    const loaders = viewLoaders(targetView);
+    if (loaders.length === 0) {
+      setLoading(false);
+      return;
+    }
     try {
       setLoading(true);
-      const [nextProducts, nextCategories, nextFinance, nextStockMovements, nextOrders, nextCustomers] = await Promise.all([api.products(), api.categories(), api.finance(), api.stockMovements(), api.orders(), api.customers()]);
-      setProducts(nextProducts);
-      setCategories(nextCategories);
-      setFinance(nextFinance);
-      setStockMovements(nextStockMovements);
-      setOrders(nextOrders);
-      setCustomers(nextCustomers);
+      await Promise.all(loaders);
+      setLoadedViews((current) => ({ ...current, [targetView]: true }));
       setMessage("");
     } catch {
       setMessage("Nao foi possivel carregar os dados. Confira se a API esta ligada.");
@@ -201,16 +272,18 @@ function App() {
     }
   }
 
+  const refreshCurrentView = () => loadView(view, true);
+
   useEffect(() => { checkSession(); }, []);
-  useEffect(() => { if (currentUser) load(); }, [currentUser?.id]);
+  useEffect(() => { if (currentUser) loadView(view); }, [currentUser?.id, view]);
   useEffect(() => {
     if (!currentUser) return;
-    const refresh = debounceRealtime(load);
+    const refresh = debounceRealtime(refreshCurrentView);
     return connectRealtime({
       onInventoryUpdated: refresh,
       onOrderChanged: refresh
     });
-  }, [currentUser?.id]);
+  }, [currentUser?.id, view]);
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
     localStorage.setItem("pedidos-theme", theme);
@@ -348,24 +421,24 @@ function App() {
             <h1>{pageTitles[view] ?? "Gerenciamento operacional"}</h1>
             <div className="muted">{loading ? "Carregando dados..." : "Produtos, estoque, financeiro e vendas no mesmo lugar"}</div>
           </div>
-          {view === "dashboard" && <button className="secondary" onClick={load}><RefreshCw size={16} />Atualizar</button>}
+          {view === "dashboard" && <button className="secondary" onClick={refreshCurrentView}><RefreshCw size={16} />Atualizar</button>}
         </div>}
 
         {notification && <div className={`notification notification-${notification.type}`}>{notification.text}</div>}
         {message && <div className="alert">{message}</div>}
         {view === "home" && <Home user={currentUser} totals={totals} products={products} orders={orders} customers={customers} setView={setView} can={can} />}
         {view === "dashboard" && <Dashboard totals={totals} products={products} orders={orders} />}
-        {view === "products" && <Products products={products} categories={categories} orders={orders} onSaved={load} notify={notify} can={can} isAdmin={currentUser.role === "admin"} />}
-        {view === "categories" && <Categories categories={categories} products={products} onSaved={load} notify={notify} can={can} />}
-        {view === "stock" && <Stock products={products} movements={stockMovements} categories={categories} onSaved={load} notify={notify} can={can} />}
-        {view === "lots" && <LotsPage products={products} onSaved={load} notify={notify} can={can} />}
-        {view === "finance" && <Finance entries={finance} products={products} orders={orders} onSaved={load} notify={notify} can={can} />}
-        {view === "orders" && <Orders products={products} orders={orders} customers={customers} onSaved={load} notify={notify} can={can} />}
+        {view === "products" && <Products products={products} categories={categories} orders={orders} onSaved={refreshCurrentView} notify={notify} can={can} isAdmin={currentUser.role === "admin"} />}
+        {view === "categories" && <Categories categories={categories} products={products} onSaved={refreshCurrentView} notify={notify} can={can} />}
+        {view === "stock" && <Stock products={products} movements={stockMovements} categories={categories} onSaved={refreshCurrentView} notify={notify} can={can} />}
+        {view === "lots" && <LotsPage products={products} onSaved={refreshCurrentView} notify={notify} can={can} />}
+        {view === "finance" && <Finance entries={finance} products={products} orders={orders} onSaved={refreshCurrentView} notify={notify} can={can} />}
+        {view === "orders" && <Orders products={products} orders={orders} customers={customers} onSaved={refreshCurrentView} notify={notify} can={can} />}
         {view === "clientPage" && <CustomerOrderPage embedded />}
-        {view === "clientPageAdmin" && <ClientPageAdmin products={products} onSaved={load} notify={notify} />}
-        {view === "customerOrders" && <CustomerOrdersPage orders={orders} onSaved={load} notify={notify} />}
-        {view === "customers" && <Customers customers={customers} orders={orders} onSaved={load} notify={notify} can={can} />}
-        {view === "users" && <UsersManager availablePermissions={availablePermissions} onSaved={load} notify={notify} />}
+        {view === "clientPageAdmin" && <ClientPageAdmin products={products} onSaved={refreshCurrentView} notify={notify} />}
+        {view === "customerOrders" && <CustomerOrdersPage orders={orders} onSaved={refreshCurrentView} notify={notify} />}
+        {view === "customers" && <Customers customers={customers} orders={orders} onSaved={refreshCurrentView} notify={notify} can={can} />}
+        {view === "users" && <UsersManager availablePermissions={availablePermissions} onSaved={refreshCurrentView} notify={notify} />}
         {view === "logs" && <LogsPage notify={notify} />}
         {view === "profile" && <ProfilePage user={currentUser} theme={theme} onThemeChange={setTheme} />}
       </main>
