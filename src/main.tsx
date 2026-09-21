@@ -15,7 +15,9 @@ if ("serviceWorker" in navigator) {
 
 const brl = (value: number | string) => Number(value).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 const dateLabel = (value?: string) => value ? new Date(`${value.includes("T") ? value : `${value}T00:00:00`}`).toLocaleString("pt-BR") : "-";
+const dateOnlyLabel = (value?: string) => value ? value.slice(0, 10).split("-").reverse().join("/") : "-";
 const assetUrl = (value?: string | null) => value?.startsWith("/uploads/") ? `${API_URL}${value}` : value ?? "";
+const onlyDigits = (value: string) => value.replace(/\D/g, "");
 
 function formatMoneyInput(value: number | string) {
   const number = typeof value === "number" ? value : Number(value || 0);
@@ -876,6 +878,10 @@ function CustomerOrderPage({ embedded = false }: { embedded?: boolean }) {
   const [cartOpen, setCartOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [submittingOrder, setSubmittingOrder] = useState(false);
+  const [customerPhone, setCustomerPhone] = useState("");
+  const [onlineCustomer, setOnlineCustomer] = useState<Customer | null>(null);
+  const [customerLookupDone, setCustomerLookupDone] = useState(false);
+  const [customerLookupLoading, setCustomerLookupLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
 
@@ -920,6 +926,35 @@ function CustomerOrderPage({ embedded = false }: { embedded?: boolean }) {
     });
   }, []);
 
+  useEffect(() => {
+    const phoneDigits = onlyDigits(customerPhone);
+    setOnlineCustomer(null);
+    setCustomerLookupDone(false);
+    if (phoneDigits.length < 10) return;
+    let active = true;
+    const timer = window.setTimeout(async () => {
+      setCustomerLookupLoading(true);
+      try {
+        const matches = await api.customers(customerPhone);
+        if (!active) return;
+        const found = matches.find((customer) => onlyDigits(customer.phone ?? "") === phoneDigits) ?? null;
+        setOnlineCustomer(found);
+        setCustomerLookupDone(true);
+      } catch {
+        if (active) {
+          setCustomerLookupDone(false);
+          setMessage("Nao foi possivel verificar o telefone.");
+        }
+      } finally {
+        if (active) setCustomerLookupLoading(false);
+      }
+    }, 450);
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
+  }, [customerPhone]);
+
   const selectedItems = products
     .filter((product) => (cart[product.id] ?? 0) > 0)
     .map((product) => ({ product, quantity: cart[product.id] ?? 0, subtotal: saleTotalFromLots(product, cart[product.id] ?? 0) }));
@@ -944,22 +979,47 @@ function CustomerOrderPage({ embedded = false }: { embedded?: boolean }) {
     });
   }
 
+  function updateCartQuantity(product: Product, quantity: number) {
+    const safeQuantity = Math.max(0, Math.min(quantity, product.stock));
+    setCart((current) => {
+      const next = { ...current };
+      if (safeQuantity <= 0) delete next[product.id];
+      else next[product.id] = safeQuantity;
+      return next;
+    });
+  }
+
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (submittingOrder || total <= 0) return;
     const form = new FormData(event.currentTarget);
+    const phoneDigits = onlyDigits(customerPhone);
+    if (phoneDigits.length < 10) {
+      setMessage("Informe um telefone valido para registrar o pedido.");
+      return;
+    }
+    const customerName = onlineCustomer?.name ?? uppercaseInput(String(form.get("customerName") ?? ""));
+    if (!onlineCustomer && !customerName.trim()) {
+      setMessage("Informe o nome para cadastrar seu pedido.");
+      return;
+    }
     setSubmittingOrder(true);
     try {
       await api.createOrder({
         source: "client_page",
         saleType: "cliente",
-        customerName: uppercaseInput(String(form.get("customerName"))),
-        customerPhone: String(form.get("customerPhone")),
+        customerId: onlineCustomer?.id,
+        customerName,
+        customerPhone,
+        customerBirthday: String(form.get("customerBirthday") ?? ""),
         paymentMethod: "pix",
         items: selectedItems.map((item) => ({ productId: item.product.id, quantity: item.quantity }))
       });
       setCart({});
       setDraftCart({});
+      setCustomerPhone("");
+      setOnlineCustomer(null);
+      setCustomerLookupDone(false);
       setCartOpen(false);
       setSuccessMessage("Pedido registrado com sucesso. Em breve ele sera preparado.");
     } catch (error) {
@@ -988,7 +1048,7 @@ function CustomerOrderPage({ embedded = false }: { embedded?: boolean }) {
             <span className="customer-price">{brl(nextSalePrice(product))}</span>
           </div>
           <div className="customer-product-body">
-            <strong>{product.name}</strong>
+            <strong>{product.name}{product.stock < 10 && <span className="last-units-badge">Ultimas unidades</span>}</strong>
             <span className="muted">Disponivel: {product.stock}</span>
           </div>
           <div className="customer-qty">
@@ -1011,14 +1071,34 @@ function CustomerOrderPage({ embedded = false }: { embedded?: boolean }) {
           <button className="icon-btn" type="button" onClick={() => setCartOpen(false)}><X size={16} /></button>
         </div>
         <form className="form" onSubmit={submit}>
-          <label>Nome<input name="customerName" required onChange={(event) => { event.currentTarget.value = uppercaseInput(event.currentTarget.value); }} /></label>
-          <label>Telefone<input name="customerPhone" required inputMode="tel" placeholder="(11) 99999-9999" onChange={(event) => { event.currentTarget.value = phoneMask(event.currentTarget.value); }} /></label>
+          <label>Telefone<input name="customerPhone" required inputMode="tel" placeholder="(11) 99999-9999" value={customerPhone} onChange={(event) => setCustomerPhone(phoneMask(event.currentTarget.value))} /></label>
+          {customerLookupLoading && <span className="muted">Verificando cadastro...</span>}
+          {onlineCustomer && <div className="customer-info-card">
+            <div><span>Cliente</span><strong>{onlineCustomer.name}</strong></div>
+            <div><span>Telefone</span><strong>{onlineCustomer.phone || customerPhone}</strong></div>
+          </div>}
+          {customerLookupDone && !onlineCustomer && <>
+            <div className="customer-not-found">
+              <strong>Cadastro nao encontrado</strong>
+              <span>Informe seu nome para criar o cadastro deste telefone.</span>
+            </div>
+            <label>Nome<input name="customerName" required onChange={(event) => { event.currentTarget.value = uppercaseInput(event.currentTarget.value); }} /></label>
+            <label>Data de aniversario<input name="customerBirthday" type="date" /></label>
+          </>}
           <div className="sale-summary">
             {selectedItems.length === 0 && <span className="muted">Nenhum produto selecionado.</span>}
             {selectedItems.map((item) => <div className="cart-line" key={item.product.id}>
-              <span>{item.quantity}x {item.product.name}</span>
+              <div className="cart-line-info">
+                <span>{item.product.name}{item.product.stock < 10 && <small className="last-units-badge">Ultimas unidades</small>}</span>
+                <small>Disponivel: {item.product.stock}</small>
+              </div>
+              <div className="cart-line-controls compact-cart-controls">
+                <button type="button" onClick={() => updateCartQuantity(item.product, item.quantity - 1)}>-</button>
+                <input type="number" min="0" max={item.product.stock} value={item.quantity} onChange={(event) => updateCartQuantity(item.product, Number(event.target.value))} />
+                <button type="button" onClick={() => updateCartQuantity(item.product, item.quantity + 1)}>+</button>
+              </div>
               <strong>{brl(item.subtotal)}</strong>
-              <button type="button" title="Remover item" onClick={() => removeFromCart(item.product.id)}><Trash2 size={16} /></button>
+              <button className="cart-remove-button" type="button" title="Remover item" onClick={() => removeFromCart(item.product.id)}><Trash2 size={16} /></button>
             </div>)}
           </div>
           <div className="customer-total"><span>Total</span><strong>{brl(total)}</strong></div>
@@ -3104,6 +3184,7 @@ function Customers({ customers, orders, onSaved, notify, can, isAdmin }: { custo
           <label>Nome<input name="name" defaultValue={editing?.name ?? ""} onChange={(event) => { event.currentTarget.value = uppercaseInput(event.currentTarget.value); }} required /></label>
           <label>Telefone<input name="phone" defaultValue={editing?.phone ?? ""} inputMode="tel" placeholder="(11) 99999-9999" onChange={(event) => { event.currentTarget.value = phoneMask(event.currentTarget.value); }} /></label>
           <label>CPF<input name="cpf" defaultValue={editing?.cpf ?? ""} /></label>
+          <label>Data de aniversario<input name="birthday" type="date" defaultValue={editing?.birthday ? editing.birthday.slice(0, 10) : ""} /></label>
           <label>Email<input name="email" type="email" defaultValue={editing?.email ?? ""} onChange={(event) => { event.currentTarget.value = uppercaseInput(event.currentTarget.value); }} /></label>
           <label>Limite fiado<input name="creditLimit" type="number" step="0.01" min="0" defaultValue={editing?.creditLimit ?? 10} /></label>
           <label style={{ gridColumn: "1 / -1" }}>Endereco<input name="address" defaultValue={editing?.address ?? ""} onChange={(event) => { event.currentTarget.value = uppercaseInput(event.currentTarget.value); }} /></label>
@@ -3130,6 +3211,10 @@ function Customers({ customers, orders, onSaved, notify, can, isAdmin }: { custo
           <div>
             <span className="muted">CPF</span>
             <strong>{viewing.cpf || "-"}</strong>
+          </div>
+          <div>
+            <span className="muted">Aniversario</span>
+            <strong>{dateOnlyLabel(viewing.birthday)}</strong>
           </div>
           <div>
             <span className="muted">Email</span>

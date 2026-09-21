@@ -104,6 +104,7 @@ export type Customer = {
   name: string;
   phone?: string;
   cpf?: string;
+  birthday?: string;
   email?: string;
   address?: string;
   notes?: string;
@@ -207,7 +208,7 @@ export const api = {
   updateCustomer: (id: string, body: Partial<Customer>) => request<Customer>(`/customers/${id}`, { method: "PUT", body: JSON.stringify(body) }),
   deleteCustomer: (id: string) => request<void>(`/customers/${id}`, { method: "DELETE" }),
   orders: () => request<Order[]>("/orders"),
-  createOrder: (body: { source?: "admin" | "client_page"; saleType?: "avulso" | "cliente"; customerId?: string; customerName?: string; customerPhone?: string; customerCpf?: string; paymentMethod?: PaymentMethod; amountPaid?: number; useCashback?: boolean; items: Array<{ productId: string; quantity: number }> }) =>
+  createOrder: (body: { source?: "admin" | "client_page"; saleType?: "avulso" | "cliente"; customerId?: string; customerName?: string; customerPhone?: string; customerCpf?: string; customerBirthday?: string; paymentMethod?: PaymentMethod; amountPaid?: number; useCashback?: boolean; items: Array<{ productId: string; quantity: number }> }) =>
     request<Order>("/orders", { method: "POST", body: JSON.stringify(body) }),
   updateOrderStatus: (id: string, status: "pending" | "preparing" | "ready" | "delivered" | "cancelled", removalKey?: string) =>
     request<Order>(`/orders/${id}/status`, { method: "PUT", body: JSON.stringify({ status, removalKey }) }),

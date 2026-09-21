@@ -1647,7 +1647,33 @@ th { color: #607080; font-size: .82rem; font-weight: 700; }
 }
 .sale-summary .cart-line {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto 34px;
+  grid-template-columns: minmax(0, 1fr) minmax(120px, 150px) auto 34px;
+}
+.sale-summary .cart-line-info {
+  align-items: flex-start;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.sale-summary .cart-line-info > span {
+  color: var(--text);
+  font-weight: 800;
+}
+.sale-summary .cart-line-info small {
+  color: var(--muted);
+}
+.last-units-badge {
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  border-radius: 999px;
+  color: #c2410c;
+  display: inline-flex;
+  font-size: 0.72rem;
+  font-weight: 900;
+  line-height: 1;
+  margin-left: 8px;
+  padding: 5px 8px;
+  text-transform: uppercase;
 }
 .cart-line button {
   align-items: center;
@@ -1659,6 +1685,22 @@ th { color: #607080; font-size: .82rem; font-weight: 700; }
   height: 34px;
   justify-content: center;
   width: 34px;
+}
+.sale-summary .cart-line .compact-cart-controls {
+  display: grid;
+  grid-template-columns: 34px minmax(42px, 1fr) 34px;
+}
+.sale-summary .cart-line .compact-cart-controls button {
+  background: #101820;
+  color: #fff;
+}
+.sale-summary .cart-line .compact-cart-controls input {
+  min-height: 34px;
+  padding: 6px;
+}
+.sale-summary .cart-line .cart-remove-button {
+  background: #fef2f2;
+  color: #b42318;
 }
 .sale-summary span {
   min-width: 0;
@@ -2296,6 +2338,21 @@ th { color: #607080; font-size: .82rem; font-weight: 700; }
   .mobile-cart-modal .sales-cart-panel form {
     display: grid;
     padding-bottom: 18px;
+  }
+  .sale-summary .cart-line {
+    grid-template-columns: minmax(0, 1fr) 34px;
+  }
+  .sale-summary .cart-line .compact-cart-controls {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+  .sale-summary .cart-line > strong {
+    grid-column: 1;
+    grid-row: 3;
+  }
+  .sale-summary .cart-line .cart-remove-button {
+    grid-column: 2;
+    grid-row: 1;
   }
   .customer-catalog {
     grid-template-columns: minmax(0, 340px);
