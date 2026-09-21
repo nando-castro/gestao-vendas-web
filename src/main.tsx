@@ -2715,6 +2715,7 @@ function paymentLabel(paymentMethod?: string) {
 
 function PendingSales({ orders, onSaved, notify }: { orders: Order[]; onSaved: () => void; notify: Notify }) {
   const [receiving, setReceiving] = useState<{ customerName: string; total: number; amountPaid: number; amountDue: number; orders: Order[] } | null>(null);
+  const [viewingOrder, setViewingOrder] = useState<Order | null>(null);
   const [amount, setAmount] = useState(0);
   const [clientFilter, setClientFilter] = useState("");
   const [expandedClients, setExpandedClients] = useState<Record<string, boolean>>({});
@@ -2802,6 +2803,38 @@ function PendingSales({ orders, onSaved, notify }: { orders: Order[]; onSaved: (
         </div>
       </div>
     </div>}
+    {viewingOrder && <div className="modal-backdrop" role="dialog" aria-modal="true">
+      <div className="modal modal-wide">
+        <div className="card-title-row">
+          <div>
+            <span className="badge">Compra fiada</span>
+            <h2>{viewingOrder.customerName || "Avulso"}</h2>
+          </div>
+          <button className="icon-btn" type="button" title="Fechar" onClick={() => setViewingOrder(null)}><X size={16} /></button>
+        </div>
+        <div className="order-modal-summary">
+          <div className="order-summary-row"><span>Data</span><strong>{dateLabel(viewingOrder.createdAt)}</strong></div>
+          <div className="order-summary-row"><span>Forma de pagamento</span><strong>{paymentLabel(viewingOrder.paymentMethod)}</strong></div>
+          <div className="order-summary-row"><span>Total</span><strong>{brl(viewingOrder.total)}</strong></div>
+          <div className="order-summary-row"><span>Pago</span><strong>{brl(viewingOrder.amountPaid ?? 0)}</strong></div>
+          <div className="order-summary-row"><span>Falta</span><strong className="danger">{brl(viewingOrder.amountDue ?? 0)}</strong></div>
+          <div className="order-summary-row"><span>Telefone</span><strong>{viewingOrder.customerPhone || "-"}</strong></div>
+        </div>
+        <div className="order-items-modal">
+          {viewingOrder.items.map((item, index) => <div className="order-item-card" key={`${item.productId}-${item.lotCode ?? "sem-lote"}-${index}`}>
+            <div className="order-item-image">
+              {item.product?.imageUrl ? <img src={assetUrl(item.product.imageUrl)} alt={item.product.name} /> : <Boxes size={24} />}
+            </div>
+            <div>
+              <strong>{item.product?.name ?? "Produto"}</strong>
+              <span>{item.quantity} unidade(s) x {brl(item.unitPrice)}</span>
+              {item.lotCode && <span className="muted">Lote: {item.lotCode}</span>}
+            </div>
+            <strong>{brl(Number(item.unitPrice) * item.quantity)}</strong>
+          </div>)}
+        </div>
+      </div>
+    </div>}
     <table>
       <thead><tr><th>Cliente</th><th>Compras</th><th>Total</th><th>Pago</th><th>Falta</th><th>Acoes</th></tr></thead>
       <tbody>
@@ -2829,7 +2862,7 @@ function PendingSales({ orders, onSaved, notify }: { orders: Order[]; onSaved: (
               <td>{brl(order.total)}</td>
               <td>{brl(order.amountPaid ?? 0)}</td>
               <td className="danger">{brl(order.amountDue ?? 0)}</td>
-              <td><span className="muted">-</span></td>
+              <td><button className="icon-btn action-icon action-view" type="button" title="Ver detalhes da compra" aria-label={`Ver detalhes da compra de ${order.customerName || "Avulso"}`} onClick={() => setViewingOrder(order)}><Eye size={16} /></button></td>
             </tr>)}
         </React.Fragment>)}
       </tbody>
