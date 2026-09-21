@@ -2787,7 +2787,7 @@ function PendingSales({ orders, onSaved, notify }: { orders: Order[]; onSaved: (
     {receiving && <div className="modal-backdrop" role="dialog" aria-modal="true">
       <div className="modal">
         <div className="card-title-row">
-          <h2>Registrar recebimento</h2>
+          <h2>Registrar pagamento</h2>
           <button className="icon-btn" type="button" title="Fechar" onClick={() => setReceiving(null)}><X size={16} /></button>
         </div>
         <div className="form">
@@ -2798,7 +2798,7 @@ function PendingSales({ orders, onSaved, notify }: { orders: Order[]; onSaved: (
             <div><span>Falta</span><strong className="danger">{brl(receiving.amountDue ?? 0)}</strong></div>
           </div>
           <label>Valor recebido<input autoFocus type="text" inputMode="numeric" value={formatMoneyInput(amount)} onChange={(event) => { maskMoneyInput(event.currentTarget); setAmount(parseMoneyInput(event.currentTarget.value)); }} /></label>
-          <button className="primary" type="button" disabled={savingPayment || amount <= 0} onClick={pay}>{savingPayment ? "Salvando..." : "Salvar recebimento"}</button>
+          <button className="primary" type="button" disabled={savingPayment || amount <= 0} onClick={pay}>{savingPayment ? "Salvando..." : "Registrar pagamento"}</button>
         </div>
       </div>
     </div>}
@@ -2818,7 +2818,7 @@ function PendingSales({ orders, onSaved, notify }: { orders: Order[]; onSaved: (
             <td>{brl(group.total)}</td>
             <td>{brl(group.amountPaid)}</td>
             <td className="danger">{brl(group.amountDue)}</td>
-            <td><button className="secondary" onClick={() => startReceive(group)}>Registrar</button></td>
+            <td><button className="secondary" onClick={() => startReceive(group)}>Registrar pagamento</button></td>
           </tr>
           {expandedClients[group.key] && group.orders
             .slice()
@@ -2829,7 +2829,7 @@ function PendingSales({ orders, onSaved, notify }: { orders: Order[]; onSaved: (
               <td>{brl(order.total)}</td>
               <td>{brl(order.amountPaid ?? 0)}</td>
               <td className="danger">{brl(order.amountDue ?? 0)}</td>
-              <td><button className="secondary compact-button" onClick={() => startReceive({ customerName: order.customerName || "Avulso", total: Number(order.total ?? 0), amountPaid: Number(order.amountPaid ?? 0), amountDue: Number(order.amountDue ?? 0), orders: [order] })}>Registrar compra</button></td>
+              <td><span className="muted">-</span></td>
             </tr>)}
         </React.Fragment>)}
       </tbody>
