@@ -153,8 +153,9 @@ export type Order = {
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const token = tokenStore.get();
+  const isFormData = options?.body instanceof FormData;
   const response = await fetch(`${API_URL}${path}`, {
-    headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(options?.headers ?? {}) },
+    headers: { ...(isFormData ? {} : { "Content-Type": "application/json" }), ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(options?.headers ?? {}) },
     ...options
   });
 
@@ -184,6 +185,12 @@ export const api = {
   deleteCategory: (id: string) => request<void>(`/categories/${id}`, { method: "DELETE" }),
   searchImages: (q: string) => request<ImageSearchResult[]>(`/images/search?q=${encodeURIComponent(q)}`),
   importImage: (url: string) => request<{ imageUrl: string }>("/images/import", { method: "POST", body: JSON.stringify({ url }) }),
+  uploadProductImage: (file: File, name: string) => {
+    const form = new FormData();
+    form.append("image", file);
+    form.append("name", name);
+    return request<{ imageUrl: string }>("/images/upload", { method: "POST", body: form });
+  },
   products: () => request<Product[]>("/products"),
   createProduct: (body: Partial<Product>) => request<Product>("/products", { method: "POST", body: JSON.stringify(body) }),
   updateProduct: (id: string, body: Partial<Product>) => request<Product>(`/products/${id}`, { method: "PUT", body: JSON.stringify(body) }),

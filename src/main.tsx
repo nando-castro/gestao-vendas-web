@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import ReactDOM from "react-dom/client";
 import { BarChart3, Boxes, ChevronDown, CirclePlus, DollarSign, Edit3, Eye, Home as HomeIcon, ImagePlus, Menu, Moon, PackagePlus, PowerOff, RefreshCw, Send, ShoppingCart, Sun, Trash2, UserRound, X } from "lucide-react";
-import { api, AppUser, Customer, FinanceEntry, ImageSearchResult, Order, PaymentMethod, Product, ProductCategory, ProductLot, StockMovement, SystemLog } from "./lib/api";
+import { api, API_URL, AppUser, Customer, FinanceEntry, ImageSearchResult, Order, PaymentMethod, Product, ProductCategory, ProductLot, StockMovement, SystemLog } from "./lib/api";
 import { connectRealtime, debounceRealtime } from "./lib/realtime";
 import "./styles/global.css";
 
@@ -9,6 +9,7 @@ document.documentElement.dataset.theme = localStorage.getItem("pedidos-theme") =
 
 const brl = (value: number | string) => Number(value).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 const dateLabel = (value?: string) => value ? new Date(`${value.includes("T") ? value : `${value}T00:00:00`}`).toLocaleString("pt-BR") : "-";
+const assetUrl = (value?: string | null) => value?.startsWith("/uploads/") ? `${API_URL}${value}` : value ?? "";
 
 function formatMoneyInput(value: number | string) {
   const number = typeof value === "number" ? value : Number(value || 0);
@@ -710,7 +711,7 @@ function CustomerOrdersPage({ orders, onSaved, notify }: { orders: Order[]; onSa
         <div className="order-items-modal">
           {viewingOrder.items.map((item) => <div className="order-item-card" key={item.productId + item.quantity}>
             <div className="order-item-image">
-              {item.product?.imageUrl ? <img src={item.product.imageUrl} alt={item.product.name} /> : <Boxes size={24} />}
+              {item.product?.imageUrl ? <img src={assetUrl(item.product.imageUrl)} alt={item.product.name} /> : <Boxes size={24} />}
             </div>
             <div>
               <strong>{item.product?.name ?? "Produto"}</strong>
@@ -1242,6 +1243,7 @@ function Products({ products, categories, orders, onSaved, notify, can, isAdmin 
   const [imageSearchQuery, setImageSearchQuery] = useState("");
   const [imageUrlToImport, setImageUrlToImport] = useState("");
   const [imageSearchResults, setImageSearchResults] = useState<ImageSearchResult[]>([]);
+  const [imageFile, setImageFile] = useState<File | null>(null);
   const [imageSearching, setImageSearching] = useState(false);
   const [imageImporting, setImageImporting] = useState("");
   const [viewing, setViewing] = useState<Product | null>(null);
@@ -1276,10 +1278,12 @@ function Products({ products, categories, orders, onSaved, notify, can, isAdmin 
   const stockPotentialProfit = stockPotentialRevenue - lotTotalCost;
 
   function readImage(file?: File) {
-    if (!file) return setImageUrl("");
-    const reader = new FileReader();
-    reader.onload = () => setImageUrl(String(reader.result));
-    reader.readAsDataURL(file);
+    if (!file) {
+      setImageFile(null);
+      return setImageUrl("");
+    }
+    setImageFile(file);
+    setImageUrl(URL.createObjectURL(file));
   }
 
   function startEdit(product: Product) {
@@ -1288,6 +1292,7 @@ function Products({ products, categories, orders, onSaved, notify, can, isAdmin 
     setBrand(product.brand ?? "");
     setCategoryId(product.categoryId ?? "");
     setImageUrl(product.imageUrl ?? "");
+    setImageFile(null);
     setSkuDraft(product.sku ?? "");
     setSkuEditable(false);
     setModalOpen(true);
@@ -1296,6 +1301,7 @@ function Products({ products, categories, orders, onSaved, notify, can, isAdmin 
   function cancelEdit() {
     setEditing(null);
     setImageUrl("");
+    setImageFile(null);
     setProductName("");
     setBrand("");
     setCategoryId("");
@@ -1359,6 +1365,7 @@ function Products({ products, categories, orders, onSaved, notify, can, isAdmin 
     try {
       const imported = await api.importImage(result.url);
       setImageUrl(imported.imageUrl);
+      setImageFile(null);
       setImageSearchOpen(false);
       notify("success", "Imagem adicionada ao produto.");
     } catch (error) {
@@ -1377,6 +1384,7 @@ function Products({ products, categories, orders, onSaved, notify, can, isAdmin 
     try {
       const imported = await api.importImage(imageUrlToImport.trim());
       setImageUrl(imported.imageUrl);
+      setImageFile(null);
       setImageSearchOpen(false);
       setImageUrlToImport("");
       notify("success", "Imagem importada pela URL.");
@@ -1398,9 +1406,10 @@ function Products({ products, categories, orders, onSaved, notify, can, isAdmin 
     setSaving(true);
     try {
       const form = new FormData(formElement);
+      const uploadedImageUrl = imageFile ? (await api.uploadProductImage(imageFile, String(form.get("name") ?? productName))).imageUrl : imageUrl;
       const payload = {
         ...Object.fromEntries(form),
-        imageUrl,
+        imageUrl: uploadedImageUrl,
         name: uppercaseInput(String(form.get("name") ?? "")),
         brand: uppercaseInput(String(form.get("brand") ?? "")),
         sku: uppercaseInput(String(form.get("sku") || generatedSku)),
@@ -1515,7 +1524,7 @@ function Products({ products, categories, orders, onSaved, notify, can, isAdmin 
               <div className={`product-image-manager ${imageUrl ? "has-image" : ""}`}>
                 <label className="upload-field">
                   <span className="upload-box product-upload-box">
-                    {imageUrl ? <img src={imageUrl} alt="Previa do produto" /> : <span className="upload-empty-state"><ImagePlus size={30} /><strong>Adicionar foto</strong><small>PNG, JPG ou WEBP</small></span>}
+                    {imageUrl ? <img src={assetUrl(imageUrl)} alt="Previa do produto" /> : <span className="upload-empty-state"><ImagePlus size={30} /><strong>Adicionar foto</strong><small>PNG, JPG ou WEBP</small></span>}
                     <input type="file" accept="image/*" onChange={(event) => readImage(event.target.files?.[0])} />
                   </span>
                 </label>
@@ -1525,7 +1534,7 @@ function Products({ products, categories, orders, onSaved, notify, can, isAdmin 
                     <input type="file" accept="image/*" onChange={(event) => readImage(event.target.files?.[0])} />
                   </label>
                   <button className="secondary" type="button" onClick={openImageSearch}><Eye size={16} />Pesquisar</button>
-                  {imageUrl && <button className="secondary danger-button" type="button" onClick={() => setImageUrl("")}><Trash2 size={16} />Remover</button>}
+                  {imageUrl && <button className="secondary danger-button" type="button" onClick={() => { setImageFile(null); setImageUrl(""); }}><Trash2 size={16} />Remover</button>}
                 </div>
               </div>
             </div>
@@ -1877,7 +1886,7 @@ function ProductTable({
 
 function ProductImage({ product }: { product: Product }) {
   return product.imageUrl
-    ? <img className="product-thumb" src={product.imageUrl} alt={product.name} />
+    ? <img className="product-thumb" src={assetUrl(product.imageUrl)} alt={product.name} />
     : <div className="product-thumb empty"><Boxes size={18} /></div>;
 }
 
