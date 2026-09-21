@@ -2377,8 +2377,10 @@ function Orders({ products, orders, customers, onSaved, notify, can }: { product
   const [customerDraft, setCustomerDraft] = useState({ name: "", phone: "", cpf: "" });
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("pix");
   const [amountPaid, setAmountPaid] = useState(0);
+  const [advanceFiado, setAdvanceFiado] = useState(false);
   const [cashReceived, setCashReceived] = useState(0);
   const [needsChange, setNeedsChange] = useState(false);
+  const [savingSale, setSavingSale] = useState(false);
   const [productQuery, setProductQuery] = useState("");
   const [cartOpen, setCartOpen] = useState(false);
   const selectedItems = products
@@ -2395,7 +2397,7 @@ function Orders({ products, orders, customers, onSaved, notify, can }: { product
     })
     .slice(0, 6);
   const payableTotal = total;
-  const effectiveAmountPaid = paymentMethod === "fiado" ? Math.min(amountPaid, payableTotal) : paymentMethod === "dinheiro" ? payableTotal : payableTotal;
+  const effectiveAmountPaid = paymentMethod === "fiado" ? (advanceFiado ? Math.min(amountPaid, payableTotal) : 0) : paymentMethod === "dinheiro" ? payableTotal : payableTotal;
   const amountDue = Math.max(payableTotal - effectiveAmountPaid, 0);
   const cashChange = paymentMethod === "dinheiro" && needsChange ? Math.max(cashReceived - payableTotal, 0) : 0;
   const cashInsufficient = paymentMethod === "dinheiro" && needsChange && cashReceived < payableTotal;
@@ -2408,7 +2410,7 @@ function Orders({ products, orders, customers, onSaved, notify, can }: { product
   const creditExceeded = paymentMethod === "fiado" && saleType === "cliente" && selectedCustomer && amountDue > creditAvailable;
   const fiadoWithoutCustomer = paymentMethod === "fiado" && saleType !== "cliente";
   const hasInvalidStock = selectedItems.some((item) => item.quantity > item.product.stock || item.product.stock <= 0);
-  const saleBlocked = total <= 0 || hasInvalidStock || fiadoWithoutCustomer || Boolean(creditExceeded) || cashInsufficient;
+  const saleBlocked = savingSale || total <= 0 || hasInvalidStock || fiadoWithoutCustomer || Boolean(creditExceeded) || cashInsufficient;
   const activeProducts = products.filter((p) => p.active && textMatches(p.name, productQuery));
 
   function updateDraftCart(product: Product, quantity: number) {
@@ -2443,7 +2445,9 @@ function Orders({ products, orders, customers, onSaved, notify, can }: { product
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (savingSale || saleBlocked) return;
     const form = new FormData(event.currentTarget);
+    setSavingSale(true);
     try {
       await api.createOrder({
         saleType,
@@ -2463,6 +2467,7 @@ function Orders({ products, orders, customers, onSaved, notify, can }: { product
       setCustomerFormOpen(false);
       setCustomerDraft({ name: "", phone: "", cpf: "" });
       setAmountPaid(0);
+      setAdvanceFiado(false);
       setCashReceived(0);
       setNeedsChange(false);
       setCartOpen(false);
@@ -2470,6 +2475,8 @@ function Orders({ products, orders, customers, onSaved, notify, can }: { product
       notify("success", "Venda registrada com sucesso.");
     } catch (error) {
       notify("error", error instanceof Error ? error.message : "Nao foi possivel registrar a venda.");
+    } finally {
+      setSavingSale(false);
     }
   }
 
@@ -2507,7 +2514,7 @@ function Orders({ products, orders, customers, onSaved, notify, can }: { product
         {showCloseButton && <button className="icon-btn" type="button" title="Fechar" onClick={() => setCartOpen(false)}><X size={18} /></button>}
       </div>
       <form className="form" onSubmit={submit}>
-      <label>Tipo de venda<select value={saleType} onChange={(event) => { const nextSaleType = event.target.value as "avulso" | "cliente"; setSaleType(nextSaleType); if (nextSaleType === "avulso" && paymentMethod === "fiado") setPaymentMethod("pix"); setSelectedCustomer(null); setCustomerQuery(""); setCustomerFormOpen(false); setCustomerDraft({ name: "", phone: "", cpf: "" }); }}>
+      <label>Tipo de venda<select value={saleType} onChange={(event) => { const nextSaleType = event.target.value as "avulso" | "cliente"; setSaleType(nextSaleType); if (nextSaleType === "avulso" && paymentMethod === "fiado") { setPaymentMethod("pix"); setAdvanceFiado(false); setAmountPaid(0); } setSelectedCustomer(null); setCustomerQuery(""); setCustomerFormOpen(false); setCustomerDraft({ name: "", phone: "", cpf: "" }); }}>
         <option value="avulso">Avulso</option>
         <option value="cliente">Cliente cadastrado</option>
       </select></label>
@@ -2530,7 +2537,7 @@ function Orders({ products, orders, customers, onSaved, notify, can }: { product
           <div><span>CPF</span><strong>{selectedCustomer.cpf || "-"}</strong></div>
         </div>}
       </>}
-      <label>Pagamento<select value={paymentMethod} onChange={(event) => { const nextPayment = event.target.value as PaymentMethod; setPaymentMethod(nextPayment); setCashReceived(0); setNeedsChange(false); if (nextPayment !== "fiado") setAmountPaid(0); }}>
+      <label>Forma de pagamento<select value={paymentMethod} onChange={(event) => { const nextPayment = event.target.value as PaymentMethod; setPaymentMethod(nextPayment); setCashReceived(0); setNeedsChange(false); setAdvanceFiado(false); setAmountPaid(0); }}>
         <option value="dinheiro">Dinheiro</option>
         <option value="pix">Pix</option>
         <option value="cartao">Cartao</option>
@@ -2538,7 +2545,8 @@ function Orders({ products, orders, customers, onSaved, notify, can }: { product
       </select></label>
       {paymentMethod === "dinheiro" && <label className="check-row"><input type="checkbox" checked={needsChange} onChange={(event) => { setNeedsChange(event.target.checked); if (!event.target.checked) setCashReceived(0); }} />Precisa de troco</label>}
       {paymentMethod === "dinheiro" && needsChange && <label>Valor recebido<input type="text" inputMode="numeric" value={cashReceived ? formatMoneyInput(cashReceived) : ""} placeholder="R$ 0,00" onChange={(event) => { maskMoneyInput(event.currentTarget); setCashReceived(parseMoneyInput(event.currentTarget.value)); }} /></label>}
-      {paymentMethod === "fiado" && <label>Valor pago agora<input type="number" min="0" max={payableTotal} step="0.01" value={amountPaid} onChange={(event) => setAmountPaid(Number(event.target.value))} /></label>}
+      {paymentMethod === "fiado" && <label className="check-row"><input type="checkbox" checked={advanceFiado} onChange={(event) => { setAdvanceFiado(event.target.checked); if (!event.target.checked) setAmountPaid(0); }} />Adiantar algum valor?</label>}
+      {paymentMethod === "fiado" && advanceFiado && <label>Valor pago agora<input type="text" inputMode="numeric" value={amountPaid ? formatMoneyInput(amountPaid) : ""} placeholder="R$ 0,00" onChange={(event) => { maskMoneyInput(event.currentTarget); setAmountPaid(parseMoneyInput(event.currentTarget.value)); }} /></label>}
       <div className="operator-cart-scroll">
         <div className="sale-summary operator-summary operator-cart-items">
           {selectedItems.length === 0 && <span className="muted">Nenhum produto selecionado.</span>}
@@ -2569,7 +2577,7 @@ function Orders({ products, orders, customers, onSaved, notify, can }: { product
         {creditExceeded && <div className="alert">Limite de fiado excedido para este cliente.</div>}
         {cashInsufficient && <div className="alert">Valor recebido menor que o total da venda.</div>}
         <div className="checkout-total"><span>Total</span><strong>{brl(payableTotal)}</strong></div>
-        <button className="primary" disabled={saleBlocked} type="submit"><ShoppingCart size={18} />Registrar venda</button>
+        <button className="primary" disabled={saleBlocked} type="submit"><ShoppingCart size={18} />{savingSale ? "Registrando..." : "Registrar venda"}</button>
       </div>
     </form>
     </div>;
