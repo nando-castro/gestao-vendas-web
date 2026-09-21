@@ -444,7 +444,7 @@ function App() {
         {view === "clientPage" && <CustomerOrderPage embedded />}
         {view === "clientPageAdmin" && <ClientPageAdmin products={products} onSaved={refreshCurrentView} notify={notify} />}
         {view === "customerOrders" && <CustomerOrdersPage orders={orders} onSaved={refreshCurrentView} notify={notify} />}
-        {view === "customers" && <Customers customers={customers} orders={orders} onSaved={refreshCurrentView} notify={notify} can={can} />}
+        {view === "customers" && <Customers customers={customers} orders={orders} onSaved={refreshCurrentView} notify={notify} can={can} isAdmin={currentUser.role === "admin"} />}
         {view === "users" && <UsersManager availablePermissions={availablePermissions} onSaved={refreshCurrentView} notify={notify} />}
         {view === "logs" && <LogsPage notify={notify} />}
         {view === "profile" && <ProfilePage user={currentUser} theme={theme} onThemeChange={setTheme} />}
@@ -2962,12 +2962,13 @@ function SalesAdmin({ orders, onSaved, notify, can }: { orders: Order[]; onSaved
   </div>;
 }
 
-function Customers({ customers, orders, onSaved, notify, can }: { customers: Customer[]; orders: Order[]; onSaved: () => void; notify: Notify; can: (permission: string) => boolean }) {
+function Customers({ customers, orders, onSaved, notify, can, isAdmin }: { customers: Customer[]; orders: Order[]; onSaved: () => void; notify: Notify; can: (permission: string) => boolean; isAdmin: boolean }) {
   const [editing, setEditing] = useState<Customer | null>(null);
   const [viewing, setViewing] = useState<Customer | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [clientFilter, setClientFilter] = useState("");
   const [saving, setSaving] = useState(false);
+  const [removingId, setRemovingId] = useState("");
   const formKey = editing?.id ?? "new-customer";
   const normalizedClientFilter = clientFilter.replace(/\D/g, "");
   const filteredCustomers = customers.filter((customer) => {
@@ -3025,6 +3026,23 @@ function Customers({ customers, orders, onSaved, notify, can }: { customers: Cus
       notify("error", error instanceof Error ? error.message : "Nao foi possivel salvar o cliente.");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function removeCustomer(customer: Customer) {
+    if (removingId) return;
+    if (!window.confirm(`Excluir o cadastro de "${customer.name}"? As vendas antigas serao mantidas no historico.`)) return;
+    setRemovingId(customer.id);
+    try {
+      await api.deleteCustomer(customer.id);
+      if (viewing?.id === customer.id) setViewing(null);
+      if (editing?.id === customer.id) closeForm();
+      await onSaved();
+      notify("success", "Cliente excluido com sucesso.");
+    } catch (error) {
+      notify("error", error instanceof Error ? error.message : "Nao foi possivel excluir o cliente.");
+    } finally {
+      setRemovingId("");
     }
   }
 
@@ -3124,6 +3142,7 @@ function Customers({ customers, orders, onSaved, notify, can }: { customers: Cus
               <td><div className="action-row">
                 <button className="icon-btn action-icon action-view" title="Visualizar cliente" aria-label={`Visualizar cliente ${customer.name}`} onClick={() => setViewing(customer)}><Eye size={16} /></button>
                 {can("customers.edit") && <button className="icon-btn action-icon action-edit" title="Editar cliente" aria-label={`Editar cliente ${customer.name}`} onClick={() => openEdit(customer)}><Edit3 size={16} /></button>}
+                {isAdmin && <button className="icon-btn action-icon action-remove" disabled={removingId === customer.id} title="Excluir cliente" aria-label={`Excluir cliente ${customer.name}`} onClick={() => removeCustomer(customer)}><Trash2 size={16} /></button>}
               </div></td>
             </tr>;
           })}
