@@ -1,0 +1,40 @@
+{
+  "name": "Pedidos Pro",
+  "short_name": "Pedidos Pro",
+  "description": "Produtos, estoque, financeiro e vendas no mesmo lugar.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f4f6f8",
+  "theme_color": "#0f766e",
+  "categories": ["business", "productivity"],
+  "icons": [
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/maskable-icon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Registrar venda",
+      "short_name": "Venda",
+      "url": "/",
+      "icons": [{ "src": "/icons/icon.svg", "sizes": "192x192", "type": "image/svg+xml" }]
+    },
+    {
+      "name": "Pedido online",
+      "short_name": "Pedido",
+      "url": "/pedido",
+      "icons": [{ "src": "/icons/icon.svg", "sizes": "192x192", "type": "image/svg+xml" }]
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Pedidos Pro">
+  <rect width="512" height="512" fill="#0f766e"/>
+  <circle cx="256" cy="256" r="180" fill="#0d9488"/>
+  <path fill="#e6fffb" d="M145 178h48l15 55h164l-44 120H229l-47-175h-37z"/>
+  <circle cx="238" cy="383" r="28" fill="#ffffff"/>
+  <circle cx="337" cy="383" r="28" fill="#ffffff"/>
+  <path fill="#08111b" d="M230 272h100v24H230z"/>
+</svg>

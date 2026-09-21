@@ -7,6 +7,12 @@ import "./styles/global.css";
 
 document.documentElement.dataset.theme = localStorage.getItem("pedidos-theme") === "dark" ? "dark" : "light";
 
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/sw.js").catch(() => undefined);
+  });
+}
+
 const brl = (value: number | string) => Number(value).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 const dateLabel = (value?: string) => value ? new Date(`${value.includes("T") ? value : `${value}T00:00:00`}`).toLocaleString("pt-BR") : "-";
 const assetUrl = (value?: string | null) => value?.startsWith("/uploads/") ? `${API_URL}${value}` : value ?? "";
