@@ -320,7 +320,7 @@ function App() {
 
   if (!authChecked) return <main className="login-page"><div className="card login-card"><h1>Pedidos Pro</h1><p className="muted">Carregando acesso...</p></div></main>;
   if (!currentUser) return <LoginPage onLogin={login} />;
-  const isAdmin = currentUser.role.toLowerCase() === "admin";
+  const isAdmin = normalizeText(currentUser.role).includes("ADMIN");
 
   const menuGroups = [
     {
@@ -3084,6 +3084,7 @@ function Customers({ customers, orders, onSaved, notify, can, isAdmin }: { custo
   const [saving, setSaving] = useState(false);
   const [removingId, setRemovingId] = useState("");
   const formKey = editing?.id ?? "new-customer";
+  const canDeleteCustomer = isAdmin || can("customers.edit");
   const normalizedClientFilter = clientFilter.replace(/\D/g, "");
   const filteredCustomers = customers.filter((customer) => {
     return textMatches(customer.name, clientFilter)
@@ -3199,7 +3200,7 @@ function Customers({ customers, orders, onSaved, notify, can, isAdmin }: { custo
         <div className="card-title-row">
           <h2>Dados do cliente</h2>
           <div className="action-row">
-            {isAdmin && <button className="icon-btn action-icon action-remove" type="button" disabled={removingId === viewing.id} title="Excluir cliente" aria-label={`Excluir cliente ${viewing.name}`} onClick={() => removeCustomer(viewing)}><Trash2 size={16} /></button>}
+            {canDeleteCustomer && <button className="icon-btn action-icon action-remove" type="button" disabled={removingId === viewing.id} title="Excluir cliente" aria-label={`Excluir cliente ${viewing.name}`} onClick={() => removeCustomer(viewing)}><Trash2 size={16} /></button>}
             <button className="icon-btn" type="button" title="Fechar" onClick={() => setViewing(null)}><X size={16} /></button>
           </div>
         </div>
@@ -3264,7 +3265,7 @@ function Customers({ customers, orders, onSaved, notify, can, isAdmin }: { custo
               <td><div className="action-row">
                 <button className="icon-btn action-icon action-view" title="Visualizar cliente" aria-label={`Visualizar cliente ${customer.name}`} onClick={() => setViewing(customer)}><Eye size={16} /></button>
                 {can("customers.edit") && <button className="icon-btn action-icon action-edit" title="Editar cliente" aria-label={`Editar cliente ${customer.name}`} onClick={() => openEdit(customer)}><Edit3 size={16} /></button>}
-                {isAdmin && <button className="icon-btn action-icon action-remove" disabled={removingId === customer.id} title="Excluir cliente" aria-label={`Excluir cliente ${customer.name}`} onClick={() => removeCustomer(customer)}><Trash2 size={16} /></button>}
+                {canDeleteCustomer && <button className="icon-btn action-icon action-remove" disabled={removingId === customer.id} title="Excluir cliente" aria-label={`Excluir cliente ${customer.name}`} onClick={() => removeCustomer(customer)}><Trash2 size={16} /></button>}
               </div></td>
             </tr>;
           })}
