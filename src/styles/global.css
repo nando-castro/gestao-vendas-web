@@ -2727,6 +2727,32 @@ th { color: #607080; font-size: .82rem; font-weight: 700; }
   padding: 8px 12px;
 }
 
+.password-field {
+  display: grid;
+  grid-template-columns: 1fr 44px;
+  align-items: stretch;
+}
+
+.password-field input {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.password-field button {
+  border: 1px solid #cbd5e1;
+  border-left: 0;
+  border-radius: 0 8px 8px 0;
+  background: #eef2f7;
+  color: #0b1118;
+  cursor: pointer;
+}
+
+[data-theme="dark"] .password-field button {
+  background: #243244;
+  border-color: #314155;
+  color: #e5eef7;
+}
+
 [data-theme="dark"] .expanded-detail-row td {
   background: #0d1520;
 }

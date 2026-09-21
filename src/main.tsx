@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import ReactDOM from "react-dom/client";
-import { BarChart3, Boxes, ChevronDown, CirclePlus, DollarSign, Edit3, Eye, Home as HomeIcon, ImagePlus, Menu, Moon, PackagePlus, PowerOff, RefreshCw, Send, ShoppingCart, Sun, Trash2, UserRound, X } from "lucide-react";
+import { BarChart3, Boxes, ChevronDown, CirclePlus, DollarSign, Edit3, Eye, EyeOff, Home as HomeIcon, ImagePlus, Menu, Moon, PackagePlus, PowerOff, RefreshCw, Send, ShoppingCart, Sun, Trash2, UserRound, X } from "lucide-react";
 import { api, API_URL, AppUser, Customer, FinanceEntry, ImageSearchResult, Order, PaymentMethod, Product, ProductCategory, ProductLot, StockMovement, SystemLog } from "./lib/api";
 import { connectRealtime, debounceRealtime } from "./lib/realtime";
 import "./styles/global.css";
@@ -450,6 +450,7 @@ function App() {
 function LoginPage({ onLogin }: { onLogin: (username: string, password: string) => Promise<void> }) {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -471,7 +472,14 @@ function LoginPage({ onLogin }: { onLogin: (username: string, password: string) 
       <p className="muted">Entre para acessar o sistema.</p>
       {error && <div className="alert">{error}</div>}
       <label>Usuario<input name="username" autoFocus required /></label>
-      <label>Senha<input name="password" type="password" required /></label>
+      <label>Senha
+        <span className="password-field">
+          <input name="password" type={showPassword ? "text" : "password"} required />
+          <button type="button" title={showPassword ? "Ocultar senha" : "Mostrar senha"} aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"} onClick={() => setShowPassword((current) => !current)}>
+            {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+          </button>
+        </span>
+      </label>
       <button className="primary" disabled={loading} type="submit">{loading ? "Entrando..." : "Entrar"}</button>
       <p className="muted">Primeiro acesso: usuario admin e senha admin123.</p>
     </form>
