@@ -320,6 +320,7 @@ function App() {
 
   if (!authChecked) return <main className="login-page"><div className="card login-card"><h1>Pedidos Pro</h1><p className="muted">Carregando acesso...</p></div></main>;
   if (!currentUser) return <LoginPage onLogin={login} />;
+  const isAdmin = currentUser.role.toLowerCase() === "admin";
 
   const menuGroups = [
     {
@@ -437,7 +438,7 @@ function App() {
         {message && <div className="alert">{message}</div>}
         {view === "home" && <Home user={currentUser} totals={totals} products={products} orders={orders} customers={customers} setView={setView} can={can} />}
         {view === "dashboard" && <Dashboard totals={totals} products={products} orders={orders} />}
-        {view === "products" && <Products products={products} categories={categories} orders={orders} onSaved={refreshCurrentView} notify={notify} can={can} isAdmin={currentUser.role === "admin"} />}
+        {view === "products" && <Products products={products} categories={categories} orders={orders} onSaved={refreshCurrentView} notify={notify} can={can} isAdmin={isAdmin} />}
         {view === "categories" && <Categories categories={categories} products={products} onSaved={refreshCurrentView} notify={notify} can={can} />}
         {view === "stock" && <Stock products={products} movements={stockMovements} categories={categories} onSaved={refreshCurrentView} notify={notify} can={can} />}
         {view === "lots" && <LotsPage products={products} onSaved={refreshCurrentView} notify={notify} can={can} />}
@@ -446,7 +447,7 @@ function App() {
         {view === "clientPage" && <CustomerOrderPage embedded />}
         {view === "clientPageAdmin" && <ClientPageAdmin products={products} onSaved={refreshCurrentView} notify={notify} />}
         {view === "customerOrders" && <CustomerOrdersPage orders={orders} onSaved={refreshCurrentView} notify={notify} />}
-        {view === "customers" && <Customers customers={customers} orders={orders} onSaved={refreshCurrentView} notify={notify} can={can} isAdmin={currentUser.role === "admin"} />}
+        {view === "customers" && <Customers customers={customers} orders={orders} onSaved={refreshCurrentView} notify={notify} can={can} isAdmin={isAdmin} />}
         {view === "users" && <UsersManager availablePermissions={availablePermissions} onSaved={refreshCurrentView} notify={notify} />}
         {view === "logs" && <LogsPage notify={notify} />}
         {view === "profile" && <ProfilePage user={currentUser} theme={theme} onThemeChange={setTheme} />}
@@ -3197,7 +3198,10 @@ function Customers({ customers, orders, onSaved, notify, can, isAdmin }: { custo
       <div className="modal modal-wide">
         <div className="card-title-row">
           <h2>Dados do cliente</h2>
-          <button className="icon-btn" type="button" title="Fechar" onClick={() => setViewing(null)}><X size={16} /></button>
+          <div className="action-row">
+            {isAdmin && <button className="icon-btn action-icon action-remove" type="button" disabled={removingId === viewing.id} title="Excluir cliente" aria-label={`Excluir cliente ${viewing.name}`} onClick={() => removeCustomer(viewing)}><Trash2 size={16} /></button>}
+            <button className="icon-btn" type="button" title="Fechar" onClick={() => setViewing(null)}><X size={16} /></button>
+          </div>
         </div>
         <div className="client-detail">
           <div>
