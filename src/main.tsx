@@ -597,8 +597,11 @@ function CustomerOrdersPage({ orders, onSaved, notify }: { orders: Order[]; onSa
   const [viewingOrder, setViewingOrder] = useState<Order | null>(null);
   const [statusChange, setStatusChange] = useState<{ order: Order; status: "pending" | "preparing" | "ready" | "delivered" | "cancelled" } | null>(null);
   const [cancelKey, setCancelKey] = useState("");
+  const [savingStatus, setSavingStatus] = useState(false);
 
   async function setStatus(order: Order, status: "pending" | "preparing" | "ready" | "delivered" | "cancelled", removalKey?: string) {
+    if (savingStatus) return;
+    setSavingStatus(true);
     try {
       await api.updateOrderStatus(order.id, status, removalKey);
       await onSaved();
@@ -607,6 +610,8 @@ function CustomerOrdersPage({ orders, onSaved, notify }: { orders: Order[]; onSa
       notify("success", "Status do pedido atualizado.");
     } catch (error) {
       notify("error", error instanceof Error ? error.message : "Nao foi possivel atualizar o pedido.");
+    } finally {
+      setSavingStatus(false);
     }
   }
 
@@ -751,7 +756,7 @@ function CustomerOrdersPage({ orders, onSaved, notify }: { orders: Order[]; onSa
         {statusChange.status === "cancelled" && <label>Chave de seguranca<input type="password" value={cancelKey} onChange={(event) => setCancelKey(event.target.value)} placeholder="Informe a chave para cancelar" /></label>}
         <div className="confirm-actions">
           <button className="secondary" onClick={() => { setStatusChange(null); setCancelKey(""); }}>Fechar</button>
-          <button className={statusChange.status === "cancelled" ? "primary danger-primary confirm-danger-button" : "primary"} disabled={statusChange.status === "cancelled" && cancelKey.trim().length === 0} onClick={() => setStatus(statusChange.order, statusChange.status, cancelKey)}>{statusChange.status === "cancelled" ? "Cancelar pedido" : "Confirmar"}</button>
+          <button className={statusChange.status === "cancelled" ? "primary danger-primary confirm-danger-button" : "primary"} disabled={savingStatus || (statusChange.status === "cancelled" && cancelKey.trim().length === 0)} onClick={() => setStatus(statusChange.order, statusChange.status, cancelKey)}>{savingStatus ? "Salvando..." : statusChange.status === "cancelled" ? "Cancelar pedido" : "Confirmar"}</button>
         </div>
       </div>
     </div>}
@@ -763,6 +768,7 @@ function UsersManager({ availablePermissions, onSaved, notify }: { availablePerm
   const [editing, setEditing] = useState<AppUser | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedPermissions, setSelectedPermissions] = useState<string[]>([]);
+  const [saving, setSaving] = useState(false);
 
   async function loadUsers() {
     setUsers(await api.users());
@@ -788,6 +794,7 @@ function UsersManager({ availablePermissions, onSaved, notify }: { availablePerm
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (saving) return;
     const data = Object.fromEntries(new FormData(event.currentTarget));
     const payload = {
       name: uppercaseInput(String(data.name)),
@@ -798,6 +805,7 @@ function UsersManager({ availablePermissions, onSaved, notify }: { availablePerm
       permissions: selectedPermissions
     };
     if (!payload.password) delete (payload as Partial<typeof payload>).password;
+    setSaving(true);
     try {
       if (editing) await api.updateUser(editing.id, payload);
       else await api.createUser(payload);
@@ -808,6 +816,8 @@ function UsersManager({ availablePermissions, onSaved, notify }: { availablePerm
       notify("success", editing ? "Usuario atualizado com sucesso." : "Usuario criado com sucesso.");
     } catch (error) {
       notify("error", error instanceof Error ? error.message : "Nao foi possivel salvar o usuario.");
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -833,7 +843,7 @@ function UsersManager({ availablePermissions, onSaved, notify }: { availablePerm
               {permissionLabels[permission] ?? permission}
             </label>)}
           </div>
-          <button className="primary" type="submit">Salvar acesso</button>
+          <button className="primary" type="submit" disabled={saving}>{saving ? "Salvando..." : "Salvar acesso"}</button>
         </form>
       </div>
     </div>}
@@ -865,6 +875,7 @@ function CustomerOrderPage({ embedded = false }: { embedded?: boolean }) {
   const [draftCart, setDraftCart] = useState<Record<string, number>>({});
   const [cartOpen, setCartOpen] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [submittingOrder, setSubmittingOrder] = useState(false);
   const [message, setMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
 
@@ -935,19 +946,27 @@ function CustomerOrderPage({ embedded = false }: { embedded?: boolean }) {
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (submittingOrder || total <= 0) return;
     const form = new FormData(event.currentTarget);
-    await api.createOrder({
-      source: "client_page",
-      saleType: "cliente",
-      customerName: uppercaseInput(String(form.get("customerName"))),
-      customerPhone: String(form.get("customerPhone")),
-      paymentMethod: "pix",
-      items: selectedItems.map((item) => ({ productId: item.product.id, quantity: item.quantity }))
-    });
-    setCart({});
-    setDraftCart({});
-    setCartOpen(false);
-    setSuccessMessage("Pedido registrado com sucesso. Em breve ele sera preparado.");
+    setSubmittingOrder(true);
+    try {
+      await api.createOrder({
+        source: "client_page",
+        saleType: "cliente",
+        customerName: uppercaseInput(String(form.get("customerName"))),
+        customerPhone: String(form.get("customerPhone")),
+        paymentMethod: "pix",
+        items: selectedItems.map((item) => ({ productId: item.product.id, quantity: item.quantity }))
+      });
+      setCart({});
+      setDraftCart({});
+      setCartOpen(false);
+      setSuccessMessage("Pedido registrado com sucesso. Em breve ele sera preparado.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Nao foi possivel registrar o pedido.");
+    } finally {
+      setSubmittingOrder(false);
+    }
   }
 
   const content = <>
@@ -1003,7 +1022,7 @@ function CustomerOrderPage({ embedded = false }: { embedded?: boolean }) {
             </div>)}
           </div>
           <div className="customer-total"><span>Total</span><strong>{brl(total)}</strong></div>
-          <button className="primary" disabled={total <= 0} type="submit"><Send size={18} />Registrar pedido</button>
+          <button className="primary" disabled={total <= 0 || submittingOrder} type="submit"><Send size={18} />{submittingOrder ? "Registrando..." : "Registrar pedido"}</button>
         </form>
       </div>
       </div>}
@@ -1263,6 +1282,7 @@ function Products({ products, categories, orders, onSaved, notify, can, isAdmin 
   const [viewing, setViewing] = useState<Product | null>(null);
   const [stocking, setStocking] = useState<Product | null>(null);
   const [stockSaving, setStockSaving] = useState(false);
+  const [removingProductId, setRemovingProductId] = useState("");
   const [lotQuantity, setLotQuantity] = useState(0);
   const [lotTotalCost, setLotTotalCost] = useState(0);
   const [stockMovementType, setStockMovementType] = useState<"in" | "out">("in");
@@ -1332,6 +1352,7 @@ function Products({ products, categories, orders, onSaved, notify, can, isAdmin 
   }
 
   async function createQuickCategory() {
+    if (quickCategorySaving) return;
     if (quickCategoryName.trim().length < 2) {
       notify("error", "Informe o nome da categoria.");
       return;
@@ -1416,6 +1437,7 @@ function Products({ products, categories, orders, onSaved, notify, can, isAdmin 
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (saving) return;
     const formElement = event.currentTarget;
     setSaving(true);
     try {
@@ -1452,6 +1474,7 @@ function Products({ products, categories, orders, onSaved, notify, can, isAdmin 
 
   async function submitStock(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (stockSaving) return;
     if (!stocking) return;
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
@@ -1485,13 +1508,17 @@ function Products({ products, categories, orders, onSaved, notify, can, isAdmin 
   }
 
   async function removeProduct(product: Product) {
+    if (removingProductId) return;
     if (!window.confirm(`Remover o produto "${product.name}"?`)) return;
+    setRemovingProductId(product.id);
     try {
       await api.deleteProduct(product.id);
       await onSaved();
       notify("success", "Produto removido com sucesso.");
     } catch (error) {
       notify("error", error instanceof Error ? error.message : "Nao foi possivel remover o produto.");
+    } finally {
+      setRemovingProductId("");
     }
   }
 
@@ -1697,6 +1724,7 @@ function Products({ products, categories, orders, onSaved, notify, can, isAdmin 
       onAddStock={can("stock.move") ? (product) => { setStocking(product); setLotQuantity(0); setLotTotalCost(0); setStockMovementType("in"); setStockOutReason(stockWithdrawalReasons[0]); setStockOutReasonOther(""); } : undefined}
       onEdit={isAdmin ? startEdit : undefined}
       onRemove={isAdmin ? removeProduct : undefined}
+      removingProductId={removingProductId}
     />
   </section>;
 }
@@ -1705,6 +1733,7 @@ function Categories({ categories, products, onSaved, notify, can }: { categories
   const [editing, setEditing] = useState<ProductCategory | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [removingId, setRemovingId] = useState("");
 
   function openNew() {
     setEditing(null);
@@ -1718,6 +1747,7 @@ function Categories({ categories, products, onSaved, notify, can }: { categories
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (saving) return;
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
     const payload = {
@@ -1745,13 +1775,17 @@ function Categories({ categories, products, onSaved, notify, can }: { categories
   }
 
   async function remove(category: ProductCategory) {
+    if (removingId) return;
     if (!window.confirm(`Desativar a categoria "${category.name}"?`)) return;
+    setRemovingId(category.id);
     try {
       await api.deleteCategory(category.id);
       await onSaved();
       notify("success", "Categoria desativada com sucesso.");
     } catch (error) {
       notify("error", error instanceof Error ? error.message : "Nao foi possivel desativar a categoria.");
+    } finally {
+      setRemovingId("");
     }
   }
 
@@ -1786,7 +1820,7 @@ function Categories({ categories, products, onSaved, notify, can }: { categories
             <td><span className="badge">{category.active ? "Ativa" : "Inativa"}</span></td>
             <td><div className="action-row">
               {can("categories.edit") && <button className="icon-btn action-icon action-edit" type="button" title="Editar categoria" aria-label={`Editar categoria ${category.name}`} onClick={() => openEdit(category)}><Edit3 size={16} /></button>}
-              {can("categories.edit") && category.active && <button className="icon-btn action-icon action-remove" type="button" title="Desativar categoria" aria-label={`Desativar categoria ${category.name}`} onClick={() => remove(category)}><PowerOff size={16} /></button>}
+              {can("categories.edit") && category.active && <button className="icon-btn action-icon action-remove" type="button" disabled={removingId === category.id} title="Desativar categoria" aria-label={`Desativar categoria ${category.name}`} onClick={() => remove(category)}><PowerOff size={16} /></button>}
             </div></td>
           </tr>)}
         </tbody>
@@ -1808,7 +1842,8 @@ function ProductTable({
   onView,
   onAddStock,
   onEdit,
-  onRemove
+  onRemove,
+  removingProductId = ""
 }: {
   products: Product[];
   orders?: Order[];
@@ -1824,6 +1859,7 @@ function ProductTable({
   onAddStock?: (product: Product) => void;
   onEdit?: (product: Product) => void;
   onRemove?: (product: Product) => void;
+  removingProductId?: string;
 }) {
   const hasActions = Boolean(onView || onAddStock || onEdit || onRemove);
     return <div className="product-table-stack">
@@ -1864,7 +1900,7 @@ function ProductTable({
               {onView && <button className="icon-btn action-icon action-view" title="Visualizar produto" onClick={() => onView(product)}><Eye size={16} /></button>}
               {onAddStock && <button className="icon-btn action-icon action-stock" title="Adicionar estoque" onClick={() => onAddStock(product)}><PackagePlus size={16} /></button>}
               {onEdit && <button className="icon-btn action-icon action-edit" title="Editar produto" onClick={() => onEdit(product)}><Edit3 size={16} /></button>}
-              {onRemove && <button className="icon-btn action-icon action-remove" title="Remover produto" onClick={() => onRemove(product)}><Trash2 size={16} /></button>}
+              {onRemove && <button className="icon-btn action-icon action-remove" disabled={removingProductId === product.id} title="Remover produto" onClick={() => onRemove(product)}><Trash2 size={16} /></button>}
             </div></td>}
           </tr>)}
       </tbody>
@@ -1882,7 +1918,7 @@ function ProductTable({
             {onView && <button className="secondary action-view-button" type="button" onClick={() => onView(product)}><Eye size={16} />Visualizar</button>}
             {onAddStock && <button className="secondary action-view-button" type="button" onClick={() => onAddStock(product)}><PackagePlus size={16} />Estoque</button>}
             {onEdit && <button className="secondary action-view-button" type="button" onClick={() => onEdit(product)}><Edit3 size={16} />Editar</button>}
-            {onRemove && <button className="secondary danger-button action-view-button" type="button" onClick={() => onRemove(product)}><Trash2 size={16} />Remover</button>}
+            {onRemove && <button className="secondary danger-button action-view-button" type="button" disabled={removingProductId === product.id} onClick={() => onRemove(product)}><Trash2 size={16} />{removingProductId === product.id ? "Removendo..." : "Remover"}</button>}
           </div>}
         </div>)}
       </div>
@@ -2282,6 +2318,7 @@ function Finance({ entries, products, orders, onSaved, notify, can }: { entries:
   const [modalOpen, setModalOpen] = useState(false);
   const [page, setPage] = useState(1);
   const [amount, setAmount] = useState(0);
+  const [saving, setSaving] = useState(false);
   const stockInvested = products.reduce((sum, product) => sum + Number(product.costPrice) * product.stock, 0);
   const salesReceived = orders.reduce((sum, order) => sum + Number(order.amountPaid ?? 0), 0);
   const manualIncome = entries.filter((entry) => entry.type === "income" && !textMatches(entry.description, "venda")).reduce((sum, entry) => sum + Number(entry.amount), 0);
@@ -2293,8 +2330,10 @@ function Finance({ entries, products, orders, onSaved, notify, can }: { entries:
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (saving) return;
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
+    setSaving(true);
     try {
       await api.createFinance({
         type: form.get("type") === "expense" ? "expense" : "income",
@@ -2310,6 +2349,8 @@ function Finance({ entries, products, orders, onSaved, notify, can }: { entries:
       notify("success", "Lancamento financeiro salvo com sucesso.");
     } catch (error) {
       notify("error", error instanceof Error ? error.message : "Nao foi possivel salvar o lancamento financeiro.");
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -2330,7 +2371,7 @@ function Finance({ entries, products, orders, onSaved, notify, can }: { entries:
           <label>Tipo<select name="type"><option value="income">Entrada em caixa</option><option value="expense">Retirada de caixa</option></select></label>
           <label>Descricao<input name="description" required onChange={(event) => { event.currentTarget.value = uppercaseInput(event.currentTarget.value); }} /></label>
           <label>Valor<input name="amount" type="text" inputMode="numeric" required value={amount ? formatMoneyInput(amount) : ""} onChange={(event) => { maskMoneyInput(event.currentTarget); setAmount(parseMoneyInput(event.currentTarget.value)); }} /></label>
-          <button className="primary" type="submit"><DollarSign size={18} />Salvar lancamento</button>
+          <button className="primary" type="submit" disabled={saving}><DollarSign size={18} />{saving ? "Salvando..." : "Salvar lancamento"}</button>
         </form>
       </div>
     </div>}
@@ -2375,6 +2416,7 @@ function Orders({ products, orders, customers, onSaved, notify, can }: { product
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [customerFormOpen, setCustomerFormOpen] = useState(false);
   const [customerDraft, setCustomerDraft] = useState({ name: "", phone: "", cpf: "" });
+  const [savingCustomer, setSavingCustomer] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("pix");
   const [amountPaid, setAmountPaid] = useState(0);
   const [advanceFiado, setAdvanceFiado] = useState(false);
@@ -2481,11 +2523,13 @@ function Orders({ products, orders, customers, onSaved, notify, can }: { product
   }
 
   async function createSaleCustomer() {
+    if (savingCustomer) return;
     const name = uppercaseInput(customerDraft.name.trim() || customerQuery.trim());
     if (!name) {
       notify("error", "Informe o nome do cliente.");
       return;
     }
+    setSavingCustomer(true);
     try {
       const created = await api.createCustomer({
         name,
@@ -2501,6 +2545,8 @@ function Orders({ products, orders, customers, onSaved, notify, can }: { product
       notify("success", "Cliente cadastrado com sucesso.");
     } catch (error) {
       notify("error", error instanceof Error ? error.message : "Nao foi possivel cadastrar o cliente.");
+    } finally {
+      setSavingCustomer(false);
     }
   }
 
@@ -2577,7 +2623,7 @@ function Orders({ products, orders, customers, onSaved, notify, can }: { product
         {creditExceeded && <div className="alert">Limite de fiado excedido para este cliente.</div>}
         {cashInsufficient && <div className="alert">Valor recebido menor que o total da venda.</div>}
         <div className="checkout-total"><span>Total</span><strong>{brl(payableTotal)}</strong></div>
-        <button className="primary" disabled={saleBlocked} type="submit"><ShoppingCart size={18} />{savingSale ? "Registrando..." : "Registrar venda"}</button>
+        <button className="primary" disabled={saleBlocked || savingSale} type="submit"><ShoppingCart size={18} />{savingSale ? "Registrando..." : "Registrar venda"}</button>
       </div>
     </form>
     </div>;
@@ -2646,7 +2692,7 @@ function Orders({ products, orders, customers, onSaved, notify, can }: { product
           <label>Nome<input autoFocus value={customerDraft.name} required onChange={(event) => setCustomerDraft((current) => ({ ...current, name: uppercaseInput(event.target.value) }))} /></label>
           <label>Telefone<input value={customerDraft.phone} inputMode="tel" placeholder="(11) 99999-9999" onChange={(event) => setCustomerDraft((current) => ({ ...current, phone: phoneMask(event.target.value) }))} /></label>
           <label>CPF<input value={customerDraft.cpf} onChange={(event) => setCustomerDraft((current) => ({ ...current, cpf: event.target.value }))} /></label>
-          <button className="primary" type="button" onClick={createSaleCustomer}><UserRound size={16} />Salvar cliente</button>
+          <button className="primary" type="button" disabled={savingCustomer} onClick={createSaleCustomer}><UserRound size={16} />{savingCustomer ? "Salvando..." : "Salvar cliente"}</button>
         </div>
       </div>
     </div>}
@@ -2672,6 +2718,7 @@ function PendingSales({ orders, onSaved, notify }: { orders: Order[]; onSaved: (
   const [amount, setAmount] = useState(0);
   const [clientFilter, setClientFilter] = useState("");
   const [expandedClients, setExpandedClients] = useState<Record<string, boolean>>({});
+  const [savingPayment, setSavingPayment] = useState(false);
   const pending = orders.filter((order) => {
     const isPending = Number(order.amountDue ?? 0) > 0 || order.paymentStatus === "partial" || order.paymentStatus === "pending";
     const clientMatches = textMatches(order.customerName || "AVULSO", clientFilter);
@@ -2706,6 +2753,8 @@ function PendingSales({ orders, onSaved, notify }: { orders: Order[]; onSaved: (
   async function pay() {
     if (!receiving) return;
     if (amount <= 0) return;
+    if (savingPayment) return;
+    setSavingPayment(true);
     try {
       let remaining = amount;
       const payableOrders = receiving.orders
@@ -2724,6 +2773,8 @@ function PendingSales({ orders, onSaved, notify }: { orders: Order[]; onSaved: (
       notify("success", "Recebimento registrado com sucesso.");
     } catch (error) {
       notify("error", error instanceof Error ? error.message : "Nao foi possivel registrar o recebimento.");
+    } finally {
+      setSavingPayment(false);
     }
   }
 
@@ -2747,7 +2798,7 @@ function PendingSales({ orders, onSaved, notify }: { orders: Order[]; onSaved: (
             <div><span>Falta</span><strong className="danger">{brl(receiving.amountDue ?? 0)}</strong></div>
           </div>
           <label>Valor recebido<input autoFocus type="text" inputMode="numeric" value={formatMoneyInput(amount)} onChange={(event) => { maskMoneyInput(event.currentTarget); setAmount(parseMoneyInput(event.currentTarget.value)); }} /></label>
-          <button className="primary" type="button" onClick={pay}>Salvar recebimento</button>
+          <button className="primary" type="button" disabled={savingPayment || amount <= 0} onClick={pay}>{savingPayment ? "Salvando..." : "Salvar recebimento"}</button>
         </div>
       </div>
     </div>}
@@ -2794,6 +2845,8 @@ function SalesAdmin({ orders, onSaved, notify, can }: { orders: Order[]; onSaved
   const [paymentStatus, setPaymentStatus] = useState<"paid" | "partial" | "pending">("paid");
   const [amountPaid, setAmountPaid] = useState(0);
   const [removalKey, setRemovalKey] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [removingSale, setRemovingSale] = useState(false);
 
   function startEdit(order: Order) {
     setEditing(order);
@@ -2805,6 +2858,8 @@ function SalesAdmin({ orders, onSaved, notify, can }: { orders: Order[]; onSaved
 
   async function saveEdit() {
     if (!editing) return;
+    if (savingEdit) return;
+    setSavingEdit(true);
     try {
       await api.updateOrderPayment(editing.id, { paymentMethod, paymentStatus, amountPaid });
       setEditing(null);
@@ -2812,11 +2867,15 @@ function SalesAdmin({ orders, onSaved, notify, can }: { orders: Order[]; onSaved
       notify("success", "Venda atualizada com sucesso.");
     } catch (error) {
       notify("error", error instanceof Error ? error.message : "Nao foi possivel atualizar a venda.");
+    } finally {
+      setSavingEdit(false);
     }
   }
 
   async function removeSale() {
     if (!removing || !removalKey) return;
+    if (removingSale) return;
+    setRemovingSale(true);
     try {
       await api.deleteOrder(removing.id, removalKey);
       setRemoving(null);
@@ -2825,6 +2884,8 @@ function SalesAdmin({ orders, onSaved, notify, can }: { orders: Order[]; onSaved
       notify("success", "Venda excluida com sucesso.");
     } catch (error) {
       notify("error", error instanceof Error ? error.message : "Nao foi possivel excluir a venda.");
+    } finally {
+      setRemovingSale(false);
     }
   }
 
@@ -2858,7 +2919,7 @@ function SalesAdmin({ orders, onSaved, notify, can }: { orders: Order[]; onSaved
           </select></label>
           <label>Valor pago<input type="number" min="0" max={Number(editing.total)} step="0.01" value={amountPaid} onChange={(event) => setAmountPaid(Number(event.target.value))} /></label>
           <label>Falta<input value={brl(Math.max(Number(editing.total) - amountPaid, 0))} disabled /></label>
-          <button className="primary" type="button" onClick={saveEdit}>Salvar alteracoes</button>
+          <button className="primary" type="button" disabled={savingEdit} onClick={saveEdit}>{savingEdit ? "Salvando..." : "Salvar alteracoes"}</button>
         </div>
       </div>
     </div>}
@@ -2874,7 +2935,7 @@ function SalesAdmin({ orders, onSaved, notify, can }: { orders: Order[]; onSaved
             <div><span>Total</span><strong>{brl(removing.total)}</strong></div>
           </div>
           <label>Chave de remocao<input autoFocus type="password" value={removalKey} onChange={(event) => setRemovalKey(event.target.value)} /></label>
-          <button className="primary danger-primary" type="button" onClick={removeSale}>Remover venda</button>
+          <button className="primary danger-primary" type="button" disabled={removingSale || !removalKey} onClick={removeSale}>{removingSale ? "Removendo..." : "Remover venda"}</button>
         </div>
       </div>
     </div>}
@@ -2906,6 +2967,7 @@ function Customers({ customers, orders, onSaved, notify, can }: { customers: Cus
   const [viewing, setViewing] = useState<Customer | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [clientFilter, setClientFilter] = useState("");
+  const [saving, setSaving] = useState(false);
   const formKey = editing?.id ?? "new-customer";
   const normalizedClientFilter = clientFilter.replace(/\D/g, "");
   const filteredCustomers = customers.filter((customer) => {
@@ -2941,12 +3003,14 @@ function Customers({ customers, orders, onSaved, notify, can }: { customers: Cus
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (saving) return;
     const formElement = event.currentTarget;
     const payload = Object.fromEntries(new FormData(formElement));
     payload.name = uppercaseInput(String(payload.name ?? ""));
     payload.email = uppercaseInput(String(payload.email ?? ""));
     payload.address = uppercaseInput(String(payload.address ?? ""));
     payload.notes = uppercaseInput(String(payload.notes ?? ""));
+    setSaving(true);
     try {
       if (editing) {
         await api.updateCustomer(editing.id, payload);
@@ -2959,6 +3023,8 @@ function Customers({ customers, orders, onSaved, notify, can }: { customers: Cus
       notify("success", editing ? "Cliente atualizado com sucesso." : "Cliente cadastrado com sucesso.");
     } catch (error) {
       notify("error", error instanceof Error ? error.message : "Nao foi possivel salvar o cliente.");
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -2991,7 +3057,7 @@ function Customers({ customers, orders, onSaved, notify, can }: { customers: Cus
           <label>Limite fiado<input name="creditLimit" type="number" step="0.01" min="0" defaultValue={editing?.creditLimit ?? 10} /></label>
           <label style={{ gridColumn: "1 / -1" }}>Endereco<input name="address" defaultValue={editing?.address ?? ""} onChange={(event) => { event.currentTarget.value = uppercaseInput(event.currentTarget.value); }} /></label>
           <label style={{ gridColumn: "1 / -1" }}>Observacoes<textarea name="notes" defaultValue={editing?.notes ?? ""} onChange={(event) => { event.currentTarget.value = uppercaseInput(event.currentTarget.value); }} /></label>
-          <button className="primary" type="submit"><UserRound size={18} />Salvar cliente</button>
+          <button className="primary" type="submit" disabled={saving}><UserRound size={18} />{saving ? "Salvando..." : "Salvar cliente"}</button>
         </form>
       </div>
     </div>}
